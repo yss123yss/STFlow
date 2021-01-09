@@ -12,6 +12,7 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy.special import binom
+from scipy.spatial import Delaunay
 from mpl_toolkits.basemap import Basemap
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
@@ -19,6 +20,9 @@ from matplotlib.colorbar import ColorbarBase
 from osgeo import gdal
 from osgeo import ogr
 from osgeo import osr
+import shapely
+from shapely import wkt, geometry
+from shapely.ops import cascaded_union
 
 
 class flowvisualhandle:
@@ -250,7 +254,258 @@ class flowvisualhandle:
             if poDS != None: del poDS
         return node_dict
 
+    def gen_points_cover_shp(self, clustered_data, cluster_id_tag, x_tag, y_tag, shpPath):
+        shpName = self._checkExistFiles(shpPath)  
     
+        poDS = None
+        try:
+            ##########################Begin for Shapefile################################
+            gdal.SetConfigOption("GDAL_FILENAME_IS_UTF8", "YES")
+            gdal.SetConfigOption("SHAPE_ENCODING", "")
+        
+            pszDriverName = "ESRI Shapefile"
+            ogr.RegisterAll()
+            poDriver = ogr.GetDriverByName(pszDriverName)
+            poDS = poDriver.CreateDataSource(shpPath)
+            
+            geomType = ogr.wkbPolygon
+            srs_str = "GEOGCS[\"GCS_WGS_1984\",DATUM[\"D_WGS_1984\",SPHEROID[\"WGS_1984\",6378137.0,298.257223563]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]]"
+            srs = osr.SpatialReference(srs_str)
+            poLayer = poDS.CreateLayer(shpName, srs, geomType)
+        
+            oField1 = ogr.FieldDefn("c_id", ogr.OFTInteger)
+            oField2 = ogr.FieldDefn("p_count", ogr.OFTInteger)
+            poLayer.CreateField(oField1, 1)
+            poLayer.CreateField(oField2, 1)
+            
+            oDefn = poLayer.GetLayerDefn()
+            ##########################End for Shapefile################################
+            
+            ##########################Begin for preparing group################################
+            id_points_group_map = {}
+            coord_dict = {}
+            id_points_count={}
+            for index,item in clustered_data.iterrows():
+                temp_cluster = item[cluster_id_tag]
+                temp_x = '%.5f' % item[x_tag]
+                temp_y = '%.5f' % item[y_tag]
+                temp_key = temp_x + '_' + temp_y
+                
+                #if (item['y']>72 or item['y']<-60): continue
+                if temp_key in coord_dict.keys():
+                    continue
+                else:
+                    coord_dict[temp_key] = 0
+                
+                if temp_cluster in id_points_group_map.keys():
+                    id_points_group_map[temp_cluster].append(item)
+                else:
+                    id_points_group_map[temp_cluster]=[]
+                    id_points_group_map[temp_cluster].append(item)
+                    
+                if temp_cluster in id_points_count.keys():
+                    id_points_count[temp_cluster]=id_points_count[temp_cluster]+1
+                else:
+                    id_points_count[temp_cluster]=1
+            ##########################End for preparing group################################
+            
+            ##########################Begin for preparing points################################
+            multi_points_list = []
+            group_id_sorted_list = sorted(id_points_group_map.keys())
+            for group_id in group_id_sorted_list:
+                temp_point_count = len(id_points_group_map[group_id])
+                allPointsGeom = ogr.Geometry(ogr.wkbMultiPoint)
+                for point_idx in range(0,temp_point_count):
+                    tempGeom = ogr.Geometry(ogr.wkbPoint)
+                    tempGeom.SetPoint(0, id_points_group_map[group_id][point_idx]['x'], id_points_group_map[group_id][point_idx]['y'], 0)
+                    allPointsGeom.AddGeometry(tempGeom)
+                multi_points_list.append(allPointsGeom)
+            ##########################End for preparing points################################
+            
+            buffer_list = []
+            buffer_id_list = []
+            convex_list = []
+            convex_id_list = []
+            group_id_sorted_list = sorted(id_points_group_map.keys())
+            #*************************************************************
+            for group_id in group_id_sorted_list:
+                temp_point_count = len(id_points_group_map[group_id])
+                if (temp_point_count==2):
+                    tempGeom = ogr.Geometry(ogr.wkbLineString)
+                    tempGeom.SetPoint(0, id_points_group_map[group_id][0]['x'], id_points_group_map[group_id][0]['y'], 0)
+                    tempGeom.SetPoint(1, id_points_group_map[group_id][1]['x'], id_points_group_map[group_id][1]['y'], 0)
+                    buffer_area=tempGeom.Buffer(0.1)
+                    buffer_list.append(buffer_area)
+                    buffer_id_list.append(group_id)
+                elif (temp_point_count==1):
+                    tempGeom = ogr.Geometry(ogr.wkbPoint)
+                    tempGeom.SetPoint(0, id_points_group_map[group_id][0]['x'], id_points_group_map[group_id][0]['y'], 0)
+                    buffer_area=tempGeom.Buffer(0.1)
+                    buffer_list.append(buffer_area)
+                    buffer_id_list.append(group_id)
+            
+            #*************************************************************
+            for group_id in group_id_sorted_list:
+                temp_point_count = len(id_points_group_map[group_id])
+                if (temp_point_count>2):
+                    points = np.zeros((temp_point_count, 2))
+                    for point_idx in range(0,temp_point_count):
+                        points[point_idx][0] = id_points_group_map[group_id][point_idx]['x']
+                        points[point_idx][1] = id_points_group_map[group_id][point_idx]['y']
+                    tri = Delaunay(points)
+                    triangle_count = len(tri.simplices)
+                    multiGeom = ogr.Geometry(ogr.wkbMultiPolygon)
+                    for tri_idx in range(0, triangle_count):
+                        v_idx1 = tri.simplices[tri_idx][0]
+                        v_idx2 = tri.simplices[tri_idx][1]
+                        v_idx3 = tri.simplices[tri_idx][2]
+                        tempGeom = ogr.Geometry(ogr.wkbLinearRing)
+                        tempGeom.SetPoint(0, points[v_idx1][0], points[v_idx1][1], 0)
+                        tempGeom.SetPoint(1, points[v_idx2][0], points[v_idx2][1], 0)
+                        tempGeom.SetPoint(2, points[v_idx3][0], points[v_idx3][1], 0)
+                        tempGeom.CloseRings()
+                        tempPolygon = ogr.Geometry(ogr.wkbPolygon)
+                        tempPolygon.AddGeometry(tempGeom)
+        
+                        flag = False
+                        for idx in range(0,len(multi_points_list)):
+                            group_id_1=group_id_sorted_list[idx]
+                            if(group_id_1==group_id): continue
+                            if (tempPolygon.Intersects(multi_points_list[idx])):
+                                flag=True                     
+                        if(flag==False):
+                            tempPolygon = ogr.Geometry(ogr.wkbPolygon)
+                            tempPolygon.AddGeometry(tempGeom)
+                            multiGeom.AddGeometry(tempPolygon)
+                    convex_list.append(multiGeom)
+                    convex_id_list.append(group_id)
+            
+            #*************************************************************
+            for convex_idx1 in range(0, len(convex_list)-1):
+                temp_geom1 = convex_list[convex_idx1]
+                temp_count1 = temp_geom1.GetGeometryCount()
+                for convex_idx2 in range(convex_idx1+1, len(convex_list)):
+                    temp_geom2 = convex_list[convex_idx2]
+                    temp_count2 = temp_geom2.GetGeometryCount()
+                    if (temp_geom1.Intersects(temp_geom2)):
+                        if(temp_geom1.GetArea() > temp_geom2.GetArea()):
+                            temp_geom1_copy = ogr.Geometry(ogr.wkbMultiPolygon)
+                            for temp_p_idx in range(0, temp_count1):
+                                if (temp_geom1.GetGeometryRef(temp_p_idx).Intersects(temp_geom2)==False):
+                                    temp_geom1_copy.AddGeometry(temp_geom1.GetGeometryRef(temp_p_idx).Clone())
+                            convex_list[convex_idx1]=temp_geom1_copy
+                        else:
+                            temp_geom2_copy = ogr.Geometry(ogr.wkbMultiPolygon)
+                            for temp_p_idx in range(0, temp_count2):
+                                if (temp_geom2.GetGeometryRef(temp_p_idx).Intersects(temp_geom1)==False):
+                                    temp_geom2_copy.AddGeometry(temp_geom2.GetGeometryRef(temp_p_idx).Clone())
+                            convex_list[convex_idx2]=temp_geom2_copy
+                
+            #*************************************************************
+            for convex_idx in range(0, len(convex_list)):
+                temp_geom = convex_list[convex_idx]
+                temp_count = temp_geom.GetGeometryCount()
+                for buffer_idx in range(0, len(buffer_list)):
+                    temp_buffer = buffer_list[buffer_idx]
+                    if (temp_geom.Intersects(temp_buffer)):
+                        temp_geom_copy = ogr.Geometry(ogr.wkbMultiPolygon)
+                        for temp_p_idx in range(0, temp_count):
+                            if (temp_geom.GetGeometryRef(temp_p_idx).Intersects(temp_buffer)==False):
+                                temp_geom_copy.AddGeometry(temp_geom.GetGeometryRef(temp_p_idx).Clone())
+                        convex_list[convex_idx]=temp_geom_copy
+            
+            #*************************************************************
+            for convex_idx in range(0, len(convex_list)):
+                temp_geom = convex_list[convex_idx]
+                temp_geos_geom = shapely.wkt.loads(temp_geom.ExportToWkt())
+                dissolved = cascaded_union(temp_geos_geom)
+                if (dissolved.geom_type=='MultiPolygon'):
+                    temp_count = len(dissolved)
+                    max_area = dissolved[0].area
+                    max_id = 0
+                    for temp_poly_idx in range(1, temp_count):
+                        if (dissolved[temp_poly_idx].area > max_area):
+                            max_area = dissolved[temp_poly_idx].area
+                            max_id = temp_poly_idx
+                    temp_p_count = len(dissolved[max_id].exterior.coords)
+                    temp_exterior = ogr.Geometry(ogr.wkbLinearRing)
+                    for p_idx in range(0, temp_p_count):
+                        temp_exterior.SetPoint(p_idx, dissolved[max_id].exterior.coords[p_idx][0], \
+                                                      dissolved[max_id].exterior.coords[p_idx][1], \
+                                                      dissolved[max_id].exterior.coords[p_idx][2])
+                    
+                    temp_polygon = ogr.Geometry(ogr.wkbPolygon)
+                    temp_polygon.AddGeometry(temp_exterior)
+                    convex_list[convex_idx]=temp_polygon
+                else:
+                    temp_p_count = len(dissolved.exterior.coords)
+                    temp_exterior = ogr.Geometry(ogr.wkbLinearRing)
+                    for p_idx in range(0, temp_p_count):
+                        temp_exterior.SetPoint(p_idx, dissolved.exterior.coords[p_idx][0], \
+                                                      dissolved.exterior.coords[p_idx][1], \
+                                                      dissolved.exterior.coords[p_idx][2])
+                    
+                    temp_polygon = ogr.Geometry(ogr.wkbPolygon)
+                    temp_polygon.AddGeometry(temp_exterior)
+                    convex_list[convex_idx]=temp_polygon
+              
+            #*************************************************************
+            for convex_idx1 in range(0, len(convex_list)-1):
+                temp_geom1 = convex_list[convex_idx1]
+                for convex_idx2 in range(convex_idx1+1, len(convex_list)):
+                    temp_geom2 = convex_list[convex_idx2]
+                    if (temp_geom1.Intersects(temp_geom2)):
+                        if(temp_geom1.GetArea() > temp_geom2.GetArea()):
+                            temp_geom1 = temp_geom1.Difference(temp_geom2)
+                            convex_list[convex_idx1]=temp_geom1
+                        else:
+                            temp_geom2 = temp_geom2.Difference(temp_geom1)
+                            convex_list[convex_idx2]=temp_geom2
+                            
+            #*************************************************************
+            for convex_idx in range(0, len(convex_list)):
+                group_id = convex_id_list[convex_idx]
+                tempFeature = ogr.Feature(oDefn)
+                tempFeature.SetGeometry(convex_list[convex_idx])
+                tempFeature.SetField(0, group_id)
+                tempFeature.SetField(1, id_points_count[group_id])
+                poLayer.CreateFeature(tempFeature)
+                del tempFeature
+                
+            for buffer_idx in range(0, len(buffer_list)):
+                group_id = buffer_id_list[buffer_idx]
+                tempFeature = ogr.Feature(oDefn)
+                tempFeature.SetGeometry(buffer_list[buffer_idx])
+                tempFeature.SetField(0, group_id)
+                tempFeature.SetField(1, id_points_count[group_id])
+                poLayer.CreateFeature(tempFeature)
+                del tempFeature
+            poDS.FlushCache()
+            if poDS!=None: del poDS
+            ##########################End Write################################
+        except Exception as e:
+            print(e)
+            if poDS!=None: del poDS
+    
+    def _bernstein(self,n, k):
+        """Bernstein polynomial.
+        """
+        coeff = binom(n, k)
+        def _bpoly(x):
+            return coeff * x ** k * (1 - x) ** (n - k)
+        return _bpoly
+    
+    def _bezier(self, xList, yList, num=200):
+        """Build Bézier curve from points.
+        """
+        points = (list(zip(xList, yList)))
+        N = len(points)
+        t = np.linspace(0, 1, num=num)
+        curve = np.zeros((num, 2))
+        for ii in range(N):
+            curve += np.outer(self._bernstein(N-1, ii)(t), points[ii])
+        return curve
+
     # =============================================================================
     # get coordinates of a curve line
     # =============================================================================

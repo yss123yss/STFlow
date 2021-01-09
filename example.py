@@ -16,7 +16,7 @@ stream_data = pd.read_csv('C:/GeoDenStream/Twitter2020/US/daily_twitter_od_2020_
 stream_handle = streamdatahandle(stream_data,"time","o_lon","o_lat","d_lon","d_lat")
 stream_handle.gen_period_points_shp('C:/GeoDenStream/Twitter2020/US/test.shp', '2020-1-2', '2020-1-2', False, ["d_lon","d_lat"])
 
-stream_handle.get_statistical_info('2020-1-1','2020-1-31',60*60*24)
+statistical_info = stream_handle.get_statistical_info('2020-1-1','2020-1-31',60*60*24)
 
 stream_handle.gen_serial_points_shp('C:/GeoDenStream/Twitter2020/US/points','2020-1-1', '2020-1-31', 24*60*60, True)
 
@@ -24,8 +24,8 @@ stream_handle = streamdatahandle(stream_data,"time","o_lon","o_lat","d_lon","d_l
 stream_handle.gen_period_lines_shp('C:/GeoDenStream/Twitter2020/US/test_line.shp', '2020-1-1', '2020-1-1',True)
 
 #******************************************************************************
-cluster_file_name = 'C:/manqi/Sandy_Weather/clusterdata_e_0.5_tp_Median/clusters_den_stream/GeoDenStream_Cluster1.csv'
-cluster_info_name = 'C:/manqi/Sandy_Weather/clusterdata_e_0.5_tp_Median/clusters_den_stream/GeoDenStream_ClusterInfo1.csv'
+cluster_file_name = 'C:/manqi/Sandy_Weather/clusterdata_e_0.5_tp_Median/clusters_den_stream/GeoDenStream_Cluster17.csv'
+cluster_info_name = 'C:/manqi/Sandy_Weather/clusterdata_e_0.5_tp_Median/clusters_den_stream/GeoDenStream_ClusterInfo17.csv'
 combind_cluster_data = pd.read_csv(cluster_file_name, index_col=[0])
 combind_cluster_info = pd.read_csv(cluster_info_name, index_col=[0])
 
@@ -48,6 +48,6 @@ visual_handle = flowvisualhandle()
 visual_handle.set_map_extent(-88,-67,34,45)
 visual_handle.set_flow_visual_parameter('D:/Data/World/world.shp','',0.15, 0.135, 0.35, 0.015)
 visual_handle.get_flow_map(flow_list_sliced3, 'T1', 'C:/manqi/Sandy_Weather/test')
-visual_handle.get_flow_map_shp(flow_list_sliced3, 'C:/manqi/Sandy_Weather/test')
-
+visual_handle.get_flow_map_shp(flow_list_sliced3, 'C:/manqi/Sandy_Weather/test.shp')
+visual_handle.gen_points_cover_shp(combind_cluster_data,'sink_cluster','x','y','C:/manqi/Sandy_Weather/test_region.shp')
 
