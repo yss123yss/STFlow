@@ -16,17 +16,17 @@ from osgeo import osr
 from dateutil import parser
 
 class streamdatahandle:
-    def __init__(self, stream_data, time_flag, lon_flag, lat_flag, od_lon_flag, od_lat_flag):
+    def __init__(self, stream_data, time_flag, x_flag, y_flag, od_x_flag, od_y_flag):
         gdal.SetConfigOption("GDAL_FILENAME_IS_UTF8", "YES")
         gdal.SetConfigOption("SHAPE_ENCODING", "")
         ogr.RegisterAll()
         
         self._stream_data = stream_data
         self._time_flag = time_flag;
-        self._lon_flag = lon_flag;
-        self._lat_flag = lat_flag;
-        self._od_lon_flag = od_lon_flag;
-        self._od_lat_flag = od_lat_flag;
+        self._lon_flag = x_flag;
+        self._lat_flag = y_flag;
+        self._od_lon_flag = od_x_flag;
+        self._od_lat_flag = od_y_flag;
         self._srs_str = "GEOGCS[\"GCS_WGS_1984\",DATUM[\"D_WGS_1984\",SPHEROID[\"WGS_1984\",6378137.0,298.257223563]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]]"
         self._stream_data[self._time_flag] = pd.to_datetime(self._stream_data[self._time_flag])
         self._stream_data = self._stream_data.set_index(self._time_flag)
@@ -143,27 +143,6 @@ class streamdatahandle:
             self.gen_period_points_shp(shpPath,begin_str,end_str,withAllFields,fields,withCompress)
             print(index)
         print("Finished")
-    
-    def get_statistical_info(self, period_begin_str, period_end_str, time_step_in_seconds):
-        total_count = len(self._stream_data)
-        begin_list=[]
-        end_list=[]
-        end_date_time =parser.parse(period_end_str)
-        temp_date_time =parser.parse(period_begin_str)
-        
-        while temp_date_time<end_date_time:
-            temp_s_str = temp_date_time.strftime('%Y-%m-%d %H:%M:%S')
-            begin_list.append(temp_s_str)
-            temp_date_time = temp_date_time + datetime.timedelta(seconds=time_step_in_seconds)
-            temp_s_str = (temp_date_time-datetime.timedelta(seconds=1)).strftime('%Y-%m-%d %H:%M:%S')
-            end_list.append(temp_s_str)
-        
-        count_list=[]
-        for idx in range(0, len(begin_list)):
-            period_data = self._stream_data.truncate(before=begin_list[idx], after=end_list[idx])
-            count_list.append(len(period_data))
-        statistical_data = pd.DataFrame({'begin':begin_list, 'end':end_list, 'count':count_list})
-        return statistical_data
     
     def gen_all_line_shp(self, shpPath, withAllFields=False, fields=[], withCompress=False):
         shpName = self._checkExistFiles(shpPath)
@@ -293,6 +272,27 @@ class streamdatahandle:
             self.gen_period_lines_shp(shpPath,begin_str,end_str,withAllFields,fields,withCompress)
             print(index)
         print("Finished")
+    
+    def get_statistical_info(self, period_begin_str, period_end_str, time_step_in_seconds):
+        total_count = len(self._stream_data)
+        begin_list=[]
+        end_list=[]
+        end_date_time =parser.parse(period_end_str)
+        temp_date_time =parser.parse(period_begin_str)
+        
+        while temp_date_time<end_date_time:
+            temp_s_str = temp_date_time.strftime('%Y-%m-%d %H:%M:%S')
+            begin_list.append(temp_s_str)
+            temp_date_time = temp_date_time + datetime.timedelta(seconds=time_step_in_seconds)
+            temp_s_str = (temp_date_time-datetime.timedelta(seconds=1)).strftime('%Y-%m-%d %H:%M:%S')
+            end_list.append(temp_s_str)
+        
+        count_list=[]
+        for idx in range(0, len(begin_list)):
+            period_data = self._stream_data.truncate(before=begin_list[idx], after=end_list[idx])
+            count_list.append(len(period_data))
+        statistical_data = pd.DataFrame({'begin':begin_list, 'end':end_list, 'count':count_list})
+        return statistical_data
     
     def _define_fields(self, poLayer, fields):
         oField1 = ogr.FieldDefn(self._time_flag, ogr.OFTString)
