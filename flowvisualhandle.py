@@ -89,7 +89,7 @@ class flowvisualhandle:
     def set_close_curve_size(self, close_curve_size):
         self._close_curve_size = close_curve_size
     
-    def get_flow_map(self, flow_list, legend_name, file_name):
+    def get_flow_map(self, flow_list, legend_name, file_name, map_dpi=600, file_formats=[".pdf"]):
         m = Basemap(projection='merc', \
                     llcrnrlat=self._low_left_lat, urcrnrlat=self._up_right_lat, \
                     llcrnrlon=self._low_left_lon, urcrnrlon=self._up_right_lon, \
@@ -163,8 +163,11 @@ class flowvisualhandle:
         cb.outline.set_visible(False)
         cb.ax.tick_params(size=0)
         
-        plt.savefig(file_name+'.pdf',bbox_inches='tight', dpi=600)
-        plt.savefig(file_name+'.jpg',bbox_inches='tight', dpi=600)
+        for item in file_formats:
+            plt.savefig(file_name+'.pdf',bbox_inches='tight', map_dpi=600)
+        if len(file_formats)==0:
+            plt.savefig(file_name+'.pdf',bbox_inches='tight', map_dpi=600)
+            plt.savefig(file_name+'.jpg',bbox_inches='tight', map_dpi=600)
         plt.close()
     
     def get_flow_map_shp(self, flow_list, flow_map_file):

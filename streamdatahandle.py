@@ -28,8 +28,27 @@ class streamdatahandle:
         self._od_lon_flag = od_x_flag;
         self._od_lat_flag = od_y_flag;
         self._srs_str = "GEOGCS[\"GCS_WGS_1984\",DATUM[\"D_WGS_1984\",SPHEROID[\"WGS_1984\",6378137.0,298.257223563]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]]"
-        self._stream_data[self._time_flag] = pd.to_datetime(self._stream_data[self._time_flag])
-        self._stream_data = self._stream_data.set_index(self._time_flag)
+        
+        if (np.issubdtype(stream_data.index,np.datetime64)==False):
+            self._stream_data[self._time_flag] = pd.to_datetime(self._stream_data[self._time_flag])
+            self._stream_data = self._stream_data.set_index(self._time_flag)
+    
+    def reset_stream_data(self, stream_data, time_flag='', x_flag='', y_flag='', od_x_flag='', od_y_flag=''):
+        self._stream_data = stream_data
+        
+        if time_flag!='': self._time_flag = time_flag;
+        if x_flag!='': self._lon_flag = x_flag;
+        if y_flag!='': self._lat_flag = y_flag;
+        if od_x_flag!='': self._od_lon_flag = od_x_flag;
+        if od_y_flag!='': self._od_lat_flag = od_y_flag;
+        
+        if (np.issubdtype(stream_data.index,np.datetime64)==False):
+            self._stream_data[self._time_flag] = pd.to_datetime(self._stream_data[self._time_flag])
+            self._stream_data = self._stream_data.set_index(self._time_flag)
+    
+    def slice_stream_data(self, period_begin_str, period_end_str):
+        period_data = self._stream_data.truncate(before=period_begin_str, after=period_end_str)
+        return period_data
     
     def gen_all_points_shp(self, shpPath, withAllFields=False, fields=[], withCompress=False):
         shpName = self._checkExistFiles(shpPath)
@@ -137,7 +156,7 @@ class streamdatahandle:
                               withAllFields=False, fields=[], withCompress=False):
         period_info = self.get_statistical_info(period_begin_str, period_end_str, time_step_in_seconds)
         for index,item in period_info.iterrows():
-            shpPath = shpBaseName+str(index)+".shp"
+            shpPath = shpBaseName+str(index+1)+".shp"
             begin_str= item['begin']
             end_str = item['end']
             self.gen_period_points_shp(shpPath,begin_str,end_str,withAllFields,fields,withCompress)
@@ -266,7 +285,7 @@ class streamdatahandle:
                              withAllFields=False, fields=[], withCompress=False):
         period_info = self.get_statistical_info(period_begin_str, period_end_str, time_step_in_seconds)
         for index,item in period_info.iterrows():
-            shpPath = shpBaseName+str(index)+".shp"
+            shpPath = shpBaseName+str(index+1)+".shp"
             begin_str= item['begin']
             end_str = item['end']
             self.gen_period_lines_shp(shpPath,begin_str,end_str,withAllFields,fields,withCompress)
