@@ -47,7 +47,7 @@ class flowvisualhandle:
         
         self._self_directed_threshold = 0.001;
         self._line_width = 0.4
-        self._arrow_size = 4
+        self._arrow_size = 3
         self._arrow_angle = 15
         self._alpha_value = 1.0
         
@@ -88,83 +88,9 @@ class flowvisualhandle:
     
     def set_close_curve_size(self, close_curve_size):
         self._close_curve_size = close_curve_size
-        
-    def get_flow_point(self,flow_data, flow_list, shp_path):
-        shpName = self._checkExistFiles(shp_path)
-        poDS = None
-        try:
-            # print("正在生成 %s" %(shpName))
-            gdal.SetConfigOption("GDAL_FILENAME_IS_UTF8", "YES")
-            gdal.SetConfigOption("SHAPE_ENCODING", "")
-            
-            pszDriverName = "ESRI Shapefile"
-            poDriver = ogr.GetDriverByName(pszDriverName)
-            poDS = poDriver.CreateDataSource(shp_path)
-            
-            geomType = ogr.wkbPoint
-            srs_str = "GEOGCS[\"GCS_WGS_1984\",DATUM[\"D_WGS_1984\",SPHEROID[\"WGS_1984\",6378137.0,298.257223563]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]]"
-            srs = osr.SpatialReference(srs_str)
-            poLayer = poDS.CreateLayer(shpName, srs, geomType)
-            
-            oField1 = ogr.FieldDefn("tag", ogr.OFTInteger)
-            oField2 = ogr.FieldDefn("X", ogr.OFTReal)
-            oField3 = ogr.FieldDefn("Y", ogr.OFTReal)
-            oField4 = ogr.FieldDefn("cluster_id", ogr.OFTInteger)
-            poLayer.CreateField(oField1, 1)
-            poLayer.CreateField(oField2, 2)
-            poLayer.CreateField(oField3, 3)
-            poLayer.CreateField(oField4, 4)
-            oDefn = poLayer.GetLayerDefn()
-            field_count = oDefn.GetFieldCount()
-            
-            origin_list = flow_list['origin'].tolist()
-            destination_list = flow_list['destination'].tolist()
-            
-            total = 0
-            
-            for index, item in flow_data.iterrows():
-                if item['source_cluster'] in origin_list and item['sink_cluster'] in destination_list and origin_list.index(item['source_cluster']) == destination_list.index(item['sink_cluster']):
-                    temp_x1 = float('%.5f' % item['x'])
-                    temp_y1 = float('%.5f' % item['y'])
-                    temp_x2 = float('%.5f' % item['re_x'])
-                    temp_y2 = float('%.5f' % item['re_y'])
-                    # print(item)
-                    
-                    # if total % 2000 == 0:
-                        # print(total)
-                    i = 0
-                    while i < 2:
-                        total = total + 1
-                        tempGeo = ogr.Geometry(ogr.wkbPoint)
-                        
-
-                        if i == 0:
-                             tempGeo.SetPoint(0, temp_x1, temp_y1, 0)
-                             tempFeature = ogr.Feature(oDefn)
-                             tempFeature.SetGeometry(tempGeo)
-                             tempFeature.SetField(1, temp_x1)
-                             tempFeature.SetField(2, temp_y1)
-                             tempFeature.SetField(3, item['source_cluster'])
-                        else:
-                            tempGeo.SetPoint(0, temp_x2, temp_y2, 0)
-                            tempFeature = ogr.Feature(oDefn)
-                            tempFeature.SetGeometry(tempGeo)
-                            tempFeature.SetField(1, temp_x2)
-                            tempFeature.SetField(2, temp_y2)
-                            tempFeature.SetField(3, item['sink_cluster'])
-                        tempFeature.SetField(0, i)
-                            
-                        poLayer.CreateFeature(tempFeature)
-                        del tempFeature
-                        i = i + 1
-            poDS.FlushCache()
-            if poDS != None: del poDS
-            # print("文件 %s生成结束 : 共 %d 个点" %(shpName, total))
-        except Exception as e:
-            print(e)
-            if poDS != None: del poDS
+    
     def get_flow_map(self, flow_list, legend_name, file_name, map_dpi=600, file_formats=[".pdf"]):
-        m = Basemap(projection='gall', \
+        m = Basemap(projection='merc', \
                     llcrnrlat=self._low_left_lat, urcrnrlat=self._up_right_lat, \
                     llcrnrlon=self._low_left_lon, urcrnrlon=self._up_right_lon, \
                     lat_ts=20,resolution='c')
@@ -182,9 +108,13 @@ class flowvisualhandle:
         
         # *************************************************************************
         #cmap = plt.cm.summer
-        cmap = mpl.colors.ListedColormap(['blue','royalblue', 'cyan', 'yellow', 'orange','red'])
+        # cmap = mpl.colors.ListedColormap(['#4987B8','#A6D29A', '#E9F3A3', '#FAE096', '#EE9264','#BB464F']) #光谱
+        cmap = plt.cm.coolwarm
         norm = Normalize(vmin=flow_list['count'].min(), vmax=flow_list['count'].max())
         mapper = ScalarMappable(norm=norm, cmap=cmap)
+        
+        max_flowcount = flow_list['count'].max()
+        min_flowcount = flow_list['count'].min()
         
         cluster_id_dict={}
         for index, row in flow_list.iterrows():
@@ -195,6 +125,7 @@ class flowvisualhandle:
             temp_x2 = row[self._destination_x_tag]
             temp_y2 = row[self._destination_y_tag]
             temp_flow_count = row[self._flow_count]
+            temp_linw_width = (temp_flow_count - min_flowcount)/(max_flowcount - min_flowcount)
             
             color_val=mapper.to_rgba(temp_flow_count)
             
@@ -208,7 +139,9 @@ class flowvisualhandle:
             else:
                 x, y = self._get_curve(x1,y1,x2,y2)
             
-            m.plot(x,y,linewidth=self._line_width,solid_capstyle='round',color=color_val, alpha=self._alpha_value)
+            
+            
+            m.plot(x,y,linewidth=self._line_width + temp_linw_width / 2, solid_capstyle='round',color=color_val, alpha=self._alpha_value)
             
             ######################--draw arrow coordinate--########################
             seg1_x, seg1_y = self._get_arrow_xy_list(x,y,self._arrow_angle,self._arrow_size)
@@ -223,8 +156,8 @@ class flowvisualhandle:
         
         # *************************************************************************
         for key, value in cluster_id_dict.items():
-            x1,y1=m(value[0], value[1])
-            plt.text(x1,y1,str(int(key)),fontsize=5)
+            x1,y1=m(value[0]+0.1, value[1]-0.3)
+            plt.text(x1,y1,str(int(key)),fontsize=7)
         
         # *************************************************************************
         plt.figtext(self._legend_x,self._legend_y+self._legend_height+0.01, legend_name, fontsize=6, ha='left')
@@ -238,98 +171,12 @@ class flowvisualhandle:
         cb.ax.tick_params(size=0)
         
         for item in file_formats:
-            plt.savefig(file_name+'.pdf',bbox_inches='tight', map_dpi=600)
+            plt.savefig(file_name+'.jpg',bbox_inches='tight', dpi=600)
         if len(file_formats)==0:
             plt.savefig(file_name+'.pdf',bbox_inches='tight', map_dpi=600)
             plt.savefig(file_name+'.jpg',bbox_inches='tight', map_dpi=600)
         plt.close()
     
-    # def get_flow_map_shp(self, flow_list, flow_map_file):
-    #     shpName = self._checkExistFiles(flow_map_file)
-    #     m = Basemap(projection='merc', \
-    #                 llcrnrlat=self._low_left_lat, urcrnrlat=self._up_right_lat, \
-    #                 llcrnrlon=self._low_left_lon, urcrnrlon=self._up_right_lon, \
-    #                 lat_ts=20,resolution='c')
-        
-    #     node_dict = {}
-    #     poDS = None
-    #     try:
-    #         gdal.SetConfigOption("GDAL_FILENAME_IS_UTF8", "YES")
-    #         gdal.SetConfigOption("SHAPE_ENCODING", "")
-    
-    #         pszDriverName = "ESRI Shapefile"
-    #         ogr.RegisterAll()
-    #         poDriver = ogr.GetDriverByName(pszDriverName)
-    #         poDS = poDriver.CreateDataSource(flow_map_file)
-            
-    #         geomType = ogr.wkbLineString
-    #         srs_str = "GEOGCS[\"GCS_WGS_1984\",DATUM[\"D_WGS_1984\",SPHEROID[\"WGS_1984\",6378137.0,298.257223563]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]]"
-    #         srs = osr.SpatialReference(srs_str)
-    #         poLayer = poDS.CreateLayer(shpName, srs, geomType)
-            
-    #         oField1 = ogr.FieldDefn("count", ogr.OFTInteger)
-    #         oField2 = ogr.FieldDefn("percentage", ogr.OFTReal)
-    #         oField3 = ogr.FieldDefn("sink_id", ogr.OFTInteger)
-    #         oField4 = ogr.FieldDefn("source_id", ogr.OFTInteger)
-    #         poLayer.CreateField(oField1, 1)
-    #         poLayer.CreateField(oField2, 1)
-    #         poLayer.CreateField(oField3, 1)
-    #         poLayer.CreateField(oField4, 1)
-        
-    #         oDefn = poLayer.GetLayerDefn()
-    #         temp_acc_val = flow_list[self._flow_count].sum()
-    #         for index, row in flow_list.iterrows():
-    #             temp_source = row[self._origin_id]
-    #             temp_sink = row[self._destination_id]
-    #             temp_x1 = row[self._origin_x_tag]
-    #             temp_y1 = row[self._origin_y_tag]
-    #             temp_x2 = row[self._destination_x_tag]
-    #             temp_y2 = row[self._destination_y_tag]
-    #             temp_flow_count = row[self._flow_count]
-                                
-    #             x1,y1=m(temp_x1, temp_y1)
-    #             x2,y2=m(temp_x2, temp_y2)
-                
-    #             #********************************************************
-    #             if temp_source not in node_dict.keys():
-    #                 node_dict[temp_source]={}
-    #                 node_dict[temp_source]["id"] = int(temp_source)
-    #                 node_dict[temp_source]["x"] = int(x1)
-    #                 node_dict[temp_source]["y"] = int(y1)
-                
-    #             if temp_sink not in node_dict.keys():
-    #                 node_dict[temp_sink]={}
-    #                 node_dict[temp_sink]["id"] = int(temp_sink)
-    #                 node_dict[temp_sink]["x"] = int(x2)
-    #                 node_dict[temp_sink]["y"] = int(y2)
-    #             #********************************************************
-                
-    #             if (temp_x1-temp_x2)*(temp_x1-temp_x2)+(temp_y1-temp_y2)*(temp_y1-temp_y2) \
-    #                     <self._self_directed_threshold*self._self_directed_threshold:
-    #                 x, y = self._get_curve_close(x1, y1, x2, y2)
-    #             else:
-    #                 x, y = self._get_curve(x1,y1,x2,y2)
-                            
-    #             tempGeom = ogr.Geometry(ogr.wkbLineString)
-    #             for temp_idx in range(0,len(x)):
-    #                 temp_x, temp_y=m(x[temp_idx], y[temp_idx], True)
-    #                 tempGeom.SetPoint(temp_idx, temp_x, temp_y, 0)
-    #             tempFeature = ogr.Feature(oDefn)
-    #             tempFeature.SetGeometry(tempGeom)
-    #             tempFeature.SetField(0, temp_flow_count)
-    #             tempFeature.SetField(1, temp_flow_count/temp_acc_val)
-    #             tempFeature.SetField(2, temp_sink)
-    #             tempFeature.SetField(3, temp_source)
-                
-    #             poLayer.CreateFeature(tempFeature)
-    #             del tempFeature
-    #         #end for iteration
-        
-    #         poDS.FlushCache()
-    #         if poDS != None: del poDS
-    #     except:
-    #         if poDS != None: del poDS
-    #     return node_dict
     def get_flow_map_shp(self, flow_list, flow_map_file):
         shpName = self._checkExistFiles(flow_map_file)
         m = Basemap(projection='merc', \
@@ -337,7 +184,6 @@ class flowvisualhandle:
                     llcrnrlon=self._low_left_lon, urcrnrlon=self._up_right_lon, \
                     lat_ts=20,resolution='c')
         
-
         node_dict = {}
         poDS = None
         try:
@@ -365,7 +211,6 @@ class flowvisualhandle:
         
             oDefn = poLayer.GetLayerDefn()
             temp_acc_val = flow_list[self._flow_count].sum()
-            resultjson = []
             for index, row in flow_list.iterrows():
                 temp_source = row[self._origin_id]
                 temp_sink = row[self._destination_id]
@@ -396,19 +241,7 @@ class flowvisualhandle:
                         <self._self_directed_threshold*self._self_directed_threshold:
                     x, y = self._get_curve_close(x1, y1, x2, y2)
                 else:
-                    x, y = self._get_curve(x1,y1,x2,y2) 
-                
-                newlist = []
-                oldlist = []
-                for index, item in enumerate(x):
-                    oldlist.append([x[index],y[index]])
-                    tx,ty = m(x[index],y[index],inverse=True)
-                    newlist.append([tx,ty])
-                resultjson.append(newlist)
-                
-                
-                
-                
+                    x, y = self._get_curve(x1,y1,x2,y2)
                             
                 tempGeom = ogr.Geometry(ogr.wkbLineString)
                 for temp_idx in range(0,len(x)):
@@ -427,12 +260,9 @@ class flowvisualhandle:
         
             poDS.FlushCache()
             if poDS != None: del poDS
-            # with open(curve_txt,'w') as txt_file:
-            #     txt_file.write(str(resultjson))
         except:
             if poDS != None: del poDS
         return node_dict
-    
 
     def gen_points_cover_shp(self, clustered_data, cluster_id_tag, x_tag, y_tag, shpPath):
         shpName = self._checkExistFiles(shpPath)  

@@ -122,8 +122,10 @@ class streamflowhandle:
         flag=0
         for iRow in range(0, flow_matrix.shape[0]):
             flag=flag+1
+            print(flag)
             #if flag>=200: break
             origin_cluster = iRow
+            if origin_cluster not in cluster_info.index: continue
             temp_origin_x = cluster_info[(cluster_info.index==origin_cluster)].iloc[0,0]
             temp_origin_y = cluster_info[(cluster_info.index==origin_cluster)].iloc[0,1]
             for iColumn in range(0, flow_matrix.shape[1]):

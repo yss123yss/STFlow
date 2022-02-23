@@ -1,0 +1,1 @@
+java -jar DenStream_D.jar DSC_Dynamic C:/GeoDenStream/Sandy/case_sandy.xml

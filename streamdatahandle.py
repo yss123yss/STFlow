@@ -281,66 +281,6 @@ class streamdatahandle:
         except:
             if poDS != None: del poDS
     
-    def gen_stream_lines_shp(self, shpPath, stream_data, withAllFields=False, fields=[], withCompress=False):
-        shpName = self._checkExistFiles(shpPath)
-        poDS = None
-        try:
-            pszDriverName = "ESRI Shapefile"
-            poDriver = ogr.GetDriverByName(pszDriverName)
-            poDS = poDriver.CreateDataSource(shpPath)
-            
-            geomType = ogr.wkbLineString
-            srs = osr.SpatialReference(self._srs_str)
-            poLayer = poDS.CreateLayer(shpName, srs, geomType)
-            
-            if (withAllFields==True):
-                fields = self._stream_data.columns.to_list()
-            self._define_fields(poLayer, fields)
-            
-            ##########################Begin for iteration################################   
-            oDefn = poLayer.GetLayerDefn()
-            field_count = oDefn.GetFieldCount()
-            coord_dict={}
-            acc_flag = 0
-            
-            for index,item in stream_data.iterrows():
-                acc_flag +=1
-                print(acc_flag)
-                if acc_flag%10000: print(acc_flag)
-                temp_x1 = '%.5f' % item[self._lon_flag]
-                temp_y1 = '%.5f' % item[self._lat_flag]
-                temp_x2 = '%.5f' % item[self._od_lon_flag]
-                temp_y2 = '%.5f' % item[self._od_lat_flag]
-                
-                temp_key = temp_x1 + '_' + temp_y1 + '_' + temp_x2 + '_' + temp_y2
-                
-                if withCompress==True:
-                    if temp_key in coord_dict.keys():
-                        coord_dict[temp_key] += 1
-                        continue
-                    else:
-                        coord_dict[temp_key] = 0
-                
-                tempGeom = ogr.Geometry(ogr.wkbLineString)
-                tempGeom.SetPoint(0, float(temp_x1), float(temp_y1), 0)
-                tempGeom.SetPoint(1, float(temp_x2), float(temp_y2), 0)
-                tempFeature = ogr.Feature(oDefn)
-                tempFeature.SetGeometry(tempGeom)
-                tempFeature.SetField(0, str(index))
-                tempFeature.SetField(1, item[self._lon_flag])
-                tempFeature.SetField(2, item[self._lat_flag])
-                for idx in range(3, field_count):
-                    temp_name = oDefn.GetFieldDefn(idx).GetName()
-                    tempFeature.SetField(idx, item[temp_name])
-                
-                poLayer.CreateFeature(tempFeature)
-                del tempFeature
-            ##########################End for iteration################################   
-            poDS.FlushCache()
-            if poDS != None: del poDS
-        except:
-            if poDS != None: del poDS
-        
     def gen_serial_lines_shp(self, shpBaseName, period_begin_str, period_end_str, time_step_in_seconds, \
                              withAllFields=False, fields=[], withCompress=False):
         period_info = self.get_statistical_info(period_begin_str, period_end_str, time_step_in_seconds)
